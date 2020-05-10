@@ -1,0 +1,4 @@
+﻿getUploadSpeed	Not Done
+DNS Amplification	Not Done
+Restart Method	Done
+Ip Spoofer	Not Done

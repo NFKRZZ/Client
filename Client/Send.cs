@@ -9,7 +9,7 @@ using System.Threading.Tasks;
 
 namespace ClientBot
 {
-    class DDOS
+    class SEND
     {
         public static bool sendData(IPAddress ipAddr,int port,int byteAmount,string text)
         {
@@ -24,6 +24,11 @@ namespace ClientBot
             {
                 return false;
             }
+        }
+        public static bool dnsAmplifcation()
+        {
+          //  Socket s = new Socket(AddressFamily.InterNetwork, SocketType.Raw, ProtocolType.Udp);
+            return false;
         }
     }
 }
