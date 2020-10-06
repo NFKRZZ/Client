@@ -20,7 +20,7 @@ namespace ClientBot
         }
         public static bool shortcut()
         {
-            IWshRuntimeLibrary.WshShell wsh = new IWshRuntimeLibrary.WshShell();
+          /*  IWshRuntimeLibrary.WshShell wsh = new IWshRuntimeLibrary.WshShell();
             IWshRuntimeLibrary.IWshShortcut shortcut = wsh.CreateShortcut(
                 Environment.GetFolderPath(Environment.SpecialFolder.Startup) + @"\program.lnk") as IWshRuntimeLibrary.IWshShortcut;
             shortcut.Arguments = "";
@@ -29,7 +29,7 @@ namespace ClientBot
             shortcut.Description = "program";
             shortcut.WorkingDirectory = Environment.CurrentDirectory + @"\";
             //shortcut.IconLocation = "specify icon location";
-            shortcut.Save();
+            shortcut.Save();*/
             return true;
         }
     }

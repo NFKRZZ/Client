@@ -43,5 +43,14 @@ namespace Client
 
             return result / 1024d;
         }
+        void getUpload()
+        {
+            IPGlobalProperties properties = IPGlobalProperties.GetIPGlobalProperties();
+            IPGlobalStatistics stats = null;
+            stats = properties.GetIPv4GlobalStatistics();
+            Console.WriteLine(stats.ForwardingEnabled);
+            Console.WriteLine(stats.ReceivedPacketsDelivered);
+           
+        }
     }
 }
