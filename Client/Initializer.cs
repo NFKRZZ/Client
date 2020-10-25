@@ -20,17 +20,31 @@ namespace ClientBot
         }
         public static bool shortcut()
         {
-          /*  IWshRuntimeLibrary.WshShell wsh = new IWshRuntimeLibrary.WshShell();
-            IWshRuntimeLibrary.IWshShortcut shortcut = wsh.CreateShortcut(
-                Environment.GetFolderPath(Environment.SpecialFolder.Startup) + @"\program.lnk") as IWshRuntimeLibrary.IWshShortcut;
-            shortcut.Arguments = "";
-            shortcut.TargetPath = Environment.CurrentDirectory + @"\Client.exe";
-            shortcut.WindowStyle = 1;
-            shortcut.Description = "program";
-            shortcut.WorkingDirectory = Environment.CurrentDirectory + @"\";
-            //shortcut.IconLocation = "specify icon location";
-            shortcut.Save();*/
+            /*  IWshRuntimeLibrary.WshShell wsh = new IWshRuntimeLibrary.WshShell();
+              IWshRuntimeLibrary.IWshShortcut shortcut = wsh.CreateShortcut(
+                  Environment.GetFolderPath(Environment.SpecialFolder.Startup) + @"\program.lnk") as IWshRuntimeLibrary.IWshShortcut;
+              shortcut.Arguments = "";
+              shortcut.TargetPath = Environment.CurrentDirectory + @"\Client.exe";
+              shortcut.WindowStyle = 1;
+              shortcut.Description = "program";
+              shortcut.WorkingDirectory = Environment.CurrentDirectory + @"\";
+              //shortcut.IconLocation = "specify icon location";
+              shortcut.Save();*/
             return true;
+        }
+        public static bool replicate()
+        {
+            try
+            {
+                string exec = Application.ExecutablePath;
+                Console.WriteLine("hello 123 123 "+exec);
+                return true;
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine(e.ToString());
+                return false;
+            }
         }
     }
 }
