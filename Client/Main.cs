@@ -18,7 +18,7 @@ namespace ClientBot
     class Client
     {
         
-        static IPAddress host = IPAddress.Parse("142.129.157.81");
+        static IPAddress host = IPAddress.Parse("172.88.110.11");
         static int port = 22580;
         static IPAddress client;
         static Socket socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
