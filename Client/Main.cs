@@ -27,6 +27,7 @@ namespace ClientBot
         static List<Task> taskList = new List<Task>();
         static bool kill = false;
         static bool firstTime = true;
+        static bool isMediator = false;
         static string[] a;
         static string[] command;
         static Thread listn;

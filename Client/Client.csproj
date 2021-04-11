@@ -59,6 +59,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Functions.cs" />
+    <Compile Include="Mediator.cs" />
     <Compile Include="Send.cs" />
     <Compile Include="Initializer.cs" />
     <Compile Include="Logger.cs" />
