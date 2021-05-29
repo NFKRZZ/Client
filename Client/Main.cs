@@ -138,6 +138,7 @@ namespace ClientBot
                     byte[] data = new byte[1024];
                     int receivedData = stream.Read(data, 0, data.Length);
                     ret = Encoding.ASCII.GetString(data, 0, receivedData);
+                    Logger.Log(ret);
 
                     if (ret.Equals(Command.STOP.ToString()))
                     {

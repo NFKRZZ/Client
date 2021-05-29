@@ -36,7 +36,7 @@ namespace Client
             log.Add(statement);
             byte[] logs = new UTF8Encoding(true).GetBytes(statement);
              tw = new StreamWriter(filePath, true);
-            tw.Write(log);
+            tw.WriteLine(log);
             
         }
         static void OnProcessExit(object sender, EventArgs e)

@@ -10,10 +10,10 @@ namespace Client
     class Mediator
     {
         static List<TcpClient> clients = new List<TcpClient>();
-        static TcpListener listener = new TcpListener();
+        //static TcpListener listener = new TcpListener();
         public static void Intialize()
         {
-            listener.
+          //  listener.
         }
     }
 }
